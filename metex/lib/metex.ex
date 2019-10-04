@@ -1,18 +1,12 @@
 defmodule Metex do
-  @moduledoc """
-  Documentation for Metex.
-  """
 
-  @doc """
-  Hello world.
+  def temperature_of(locations) do
+    coordinator_pid =
+      spawn(Metex.Coordinator, :loop, [[], Enum.count(locations)])
 
-  ## Examples
-
-      iex> Metex.hello()
-      :world
-
-  """
-  def hello do
-    :world
+    locations |> Enum.each(fn location ->
+      worker_pid = spawn(Metex.Worker, :loop, [])
+      send worker_pid, {coordinator_pid, location}
+    end)
   end
 end

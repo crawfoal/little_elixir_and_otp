@@ -1,0 +1,10 @@
+#!/bin/bash
+
+if [[ $1 == "" ]] && [[ -f ".env" ]]; then
+  export $(cat .env | xargs) && iex -S mix
+elif [[ $1 != "" ]]; then
+  export $(cat "$1" | xargs) && iex -S mix
+else
+  iex -S mix
+fi
+
