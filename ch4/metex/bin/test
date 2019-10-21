@@ -1,0 +1,13 @@
+#!/bin/bash
+
+# could make a more general script since this duplicates bin/console, but maybe
+# that's what the Elixir dotenv package does ¯\_(ツ)_/¯
+
+if [[ $1 == "" ]] && [[ -f ".env" ]]; then
+  export $(cat .env | xargs) && mix test
+elif [[ $1 != "" ]]; then
+  export $(cat "$1" | xargs) && mix test
+else
+  mix test
+fi
+

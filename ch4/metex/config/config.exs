@@ -28,3 +28,7 @@ use Mix.Config
 # here (which is why it is important to import them last).
 #
 #     import_config "#{Mix.env()}.exs"
+
+config :metex, weather_api_key: System.get_env("WEATHER_API_KEY")
+config :metex, weather_api_base_url: System.get_env("WEATHER_API_BASE_URL")
+
