@@ -29,6 +29,15 @@ defmodule Pooly.Server do
     GenServer.call(:"#{pool_name}Server", :status)
   end
 
+  def transaction(pool_name, fun, args, block, timeout) do
+    worker = checkout(pool_name, block, timeout)
+    try do
+      apply(fun, args)
+    after
+      checkin(pool_name, worker)
+    end
+  end
+
   #############
   # Callbacks #
   #############

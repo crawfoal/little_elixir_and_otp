@@ -113,13 +113,13 @@ defmodule Pooly.PoolServer do
   def handle_cast({:checkin, worker}, %{monitors: monitors} = state) do
     case :ets.lookup(monitors, worker) do
       [{pid, ref}] ->
-        Logger.info("Checking in worker #{worker}.")
+        Logger.info("Checking in worker #{inspect worker}.")
         true = Process.demonitor(ref)
         true = :ets.delete(monitors, pid)
         new_state = handle_checkin(pid, state)
         {:noreply, new_state}
       [] ->
-        Logger.info("Ignored request to checkin unknown worker #{worker}.")
+        Logger.info("Ignored request to checkin unknown worker #{inspect worker}.")
         {:noreply, state}
     end
   end
