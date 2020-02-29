@@ -21,8 +21,8 @@ defmodule Pooly.PoolServer do
     GenServer.call(name(pool_name), {:checkout, block}, timeout)
   end
 
-  def checkin(pool_name, worker_pid) do
-    GenServer.cast(name(pool_name), {:checkin, worker_pid})
+  def checkin(pool_name, ticket) do
+    GenServer.cast(name(pool_name), {:checkin, ticket})
   end
 
   def status(pool_name) do
@@ -74,14 +74,16 @@ defmodule Pooly.PoolServer do
       [worker | rest] ->
         Logger.info("Checking out standard worker.")
         ref = Process.monitor(from_pid)
-        true = :ets.insert(monitors, {worker, ref})
-        {:reply, worker, %{state | workers: rest}}
+        ticket = UUID.uuid4()
+        true = :ets.insert(monitors, {ticket, worker, ref})
+        {:reply, {ticket, worker}, %{state | workers: rest}}
 
       [] when max_overflow > 0 and overflow < max_overflow ->
         Logger.info("Creating and checking out overflow worker.")
         {worker, ref} = {new_worker(worker_sup), Process.monitor(from_pid)}
-        true = :ets.insert(monitors, {worker, ref})
-        {:reply, worker, %{state | overflow: overflow + 1}}
+        ticket = UUID.uuid4()
+        true = :ets.insert(monitors, {ticket, worker, ref})
+        {:reply, {ticket, worker}, %{state | overflow: overflow + 1}}
 
       [] when block == true ->
         Logger.info("Blocking consumer process #{inspect from_pid} to wait for worker.")
@@ -90,7 +92,7 @@ defmodule Pooly.PoolServer do
         {:noreply, %{ state | waiting: waiting }, :infinity}
 
       [] ->
-        Logger.info("Failed to checkout worker for #{inspect from_pid}; all worker taken.")
+        Logger.info("Failed to checkout worker for #{inspect from_pid}; all workers taken.")
         {:reply, :full, state}
     end
   end
@@ -110,16 +112,16 @@ defmodule Pooly.PoolServer do
     {:reply, status, state}
   end
 
-  def handle_cast({:checkin, worker}, %{monitors: monitors} = state) do
-    case :ets.lookup(monitors, worker) do
-      [{pid, ref}] ->
-        Logger.info("Checking in worker #{inspect worker}.")
+  def handle_cast({:checkin, ticket}, %{monitors: monitors} = state) do
+    case :ets.lookup(monitors, ticket) do
+      [{ticket, pid, ref}] ->
+        Logger.info("Checking in worker with ticket #{ticket}.")
         true = Process.demonitor(ref)
         true = :ets.delete(monitors, pid)
         new_state = handle_checkin(pid, state)
         {:noreply, new_state}
       [] ->
-        Logger.info("Ignored request to checkin unknown worker #{inspect worker}.")
+        Logger.info("Ignored request to checkin unknown worker with ticket #{inspect ticket}.")
         {:noreply, state}
     end
   end
@@ -135,7 +137,7 @@ defmodule Pooly.PoolServer do
   end
   def handle_info({:DOWN, ref, _, _, _}, state = %{monitors: monitors,
   workers: workers}) do
-    case :ets.match(monitors, {:"$1", ref}) do
+    case :ets.match(monitors, {:"_", :"$1", ref}) do
       [[pid]] ->
         Logger.info("Worker process #{pid} down. Recovering now.")
         true = :ets.delete(monitors, pid)
@@ -147,15 +149,15 @@ defmodule Pooly.PoolServer do
     end
   end
   def handle_info({:EXIT, pid, _reason}, state = %{monitors: monitors}) do
-    case :ets.lookup(monitors, pid) do
-      [{pid, ref}] ->
+    case :ets.match(monitors, {:"_", pid, :"$2"}) do
+      [[ref]] ->
         Logger.info("Handling exit of worker #{inspect pid}.")
         true = Process.demonitor(ref)
         true = :ets.delete(monitors, pid)
         new_state = handle_worker_exit(pid, state)
         {:noreply, new_state}
       _ ->
-        Logger.info("Unknown process #{pid} exited.")
+        Logger.info("Unknown process #{inspect pid} exited.")
         {:noreply, state}
     end
   end
@@ -220,9 +222,10 @@ defmodule Pooly.PoolServer do
 
     case :queue.out(waiting) do
       {{:value, {from, ref}}, remaining} ->
-        true = :ets.insert(monitors, {pid, ref})
-        GenServer.reply(from, pid)
-        Logger.info("Worker #{inspect pid} now being used by #{inspect from}.")
+        ticket = UUID.uuid4()
+        true = :ets.insert(monitors, {ticket, pid, ref})
+        GenServer.reply(from, {ticket, pid})
+        Logger.info("Worker #{inspect pid} now being used by #{inspect from} with ticket #{ticket}.")
         %{state | waiting: remaining }
 
       {:empty, empty} when overflow > 0 ->
@@ -253,8 +256,9 @@ defmodule Pooly.PoolServer do
     case :queue.out(waiting) do
       {{:value, {from, ref}}, remaining} ->
         new_worker = new_worker(worker_sup)
-        true = :ets.insert(monitors, {new_worker, ref})
-        GenServer.reply(from, new_worker)
+        ticket = UUID.uuid4()
+        true = :ets.insert(monitors, {ticket, new_worker, ref})
+        GenServer.reply(from, {ticket, new_worker})
         %{state | waiting: remaining }
 
       {:empty, empty} when overflow > 0 ->

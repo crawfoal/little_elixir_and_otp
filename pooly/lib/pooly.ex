@@ -35,8 +35,8 @@ defmodule Pooly do
     Pooly.Server.checkout(pool_name, block, timeout)
   end
 
-  def checkin(pool_name, worker_pid) do
-    Pooly.Server.checkin(pool_name, worker_pid)
+  def checkin(pool_name, ticket) do
+    Pooly.Server.checkin(pool_name, ticket)
   end
 
   def status(pool_name) do

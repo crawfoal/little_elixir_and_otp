@@ -21,8 +21,8 @@ defmodule Pooly.Server do
     Pooly.PoolServer.checkout(pool_name, block, timeout)
   end
 
-  def checkin(pool_name, worker_pid) do
-    GenServer.cast(:"#{pool_name}Server", {:checkin, worker_pid})
+  def checkin(pool_name, ticket) do
+    GenServer.cast(:"#{pool_name}Server", {:checkin, ticket})
   end
 
   def status(pool_name) do
@@ -30,11 +30,11 @@ defmodule Pooly.Server do
   end
 
   def transaction(pool_name, fun, args, block, timeout) do
-    worker = checkout(pool_name, block, timeout)
+    ticket = checkout(pool_name, block, timeout)
     try do
       apply(fun, args)
     after
-      checkin(pool_name, worker)
+      checkin(pool_name, ticket)
     end
   end
 
